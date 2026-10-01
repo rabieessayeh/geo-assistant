@@ -1,0 +1,50 @@
+"""Application settings, read from environment variables and an optional `.env` file.
+
+Every tunable lives here so the rest of the code never touches `os.environ`.
+Environment variables take precedence over `.env`; see `.env.example`.
+"""
+
+import logging
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic import Field, SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Runtime configuration of the assistant."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # LLM endpoint: any OpenAI-compatible API. The defaults target a local Ollama server.
+    llm_base_url: str = "http://localhost:11434/v1"
+    llm_api_key: SecretStr = SecretStr("ollama")  # Ollama ignores the key
+    llm_model: str = "gpt-oss:20b"
+    llm_timeout_s: float = Field(default=60.0, gt=0)
+    llm_max_retries: int = Field(default=4, ge=0, description="Retries on HTTP 429 / 5xx.")
+    llm_retry_base_s: float = Field(default=2.0, ge=0, description="First backoff delay.")
+
+    # Agent loop
+    max_steps: int = Field(default=5, ge=1, description="Max LLM round-trips per question.")
+
+    # Data and logging
+    data_dir: Path = Path("data/sample")
+    log_level: str = "INFO"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Return the process-wide settings (loaded once)."""
+    return Settings()
+
+
+def configure_logging(level: str = "INFO") -> None:
+    """Set up console logging for the application and its scripts."""
+    logging.basicConfig(
+        level=level.upper(),
+        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    # One line per HTTP request to the LLM is too noisy at INFO level.
+    logging.getLogger("httpx").setLevel(logging.WARNING)

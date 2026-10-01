@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geo Assistant</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1c2330; --muted: #6b7686;
+    --border: #dfe3ea; --accent: #1f6feb; --accent-text: #ffffff;
+    --bot: #eef1f6; --error-bg: #fdecec; --error-text: #a12626;
+    --result: #e8590c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1a1f28; --text: #e6e9ef; --muted: #96a0b0;
+      --border: #2c3442; --accent: #4c8dff; --accent-text: #0b1220;
+      --bot: #232a36; --error-bg: #3a1d1f; --error-text: #ff9c9c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+  }
+  #sidebar {
+    width: 420px; flex: none; height: 100%; display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+  }
+  #map { flex: 1; height: 100%; min-width: 0; background: #dde3ea; }
+  header { padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
+  .title { display: flex; align-items: baseline; gap: 12px; }
+  h1 { font-size: 18px; margin: 0; flex: 1; }
+  #meta { color: var(--muted); font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+  #reset { background: none; border: 0; padding: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; }
+  #reset:hover { color: var(--text); }
+  #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; }
+  .msg { max-width: 92%; padding: 9px 13px; border-radius: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .user { align-self: flex-end; background: var(--accent); color: var(--accent-text); border-bottom-right-radius: 4px; }
+  .assistant { align-self: flex-start; background: var(--bot); border-bottom-left-radius: 4px; }
+  .error { align-self: flex-start; background: var(--error-bg); color: var(--error-text); }
+  .pending { color: var(--muted); }
+  .hint { color: var(--muted); margin: auto; text-align: center; }
+  .hint button {
+    display: block; width: 100%; margin: 8px auto 0; padding: 7px 12px; border-radius: 999px; cursor: pointer;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); font: inherit; font-size: 14px;
+  }
+  .hint button:hover { border-color: var(--accent); }
+  details { margin-top: 8px; font-size: 13px; color: var(--muted); white-space: normal; }
+  summary { cursor: pointer; }
+  details ol { margin: 6px 0 0; padding-left: 20px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .show-map {
+    display: block; margin-top: 8px; padding: 3px 10px; border-radius: 999px; cursor: pointer;
+    background: none; color: var(--result); border: 1px solid var(--result); font: inherit; font-size: 12px;
+  }
+  form { display: flex; gap: 8px; padding: 10px 16px 16px; border-top: 1px solid var(--border); }
+  textarea {
+    flex: 1; resize: none; padding: 10px 12px; border-radius: 12px; font: inherit;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+  }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  form button {
+    padding: 0 18px; border: 0; border-radius: 12px; cursor: pointer; font: inherit; font-weight: 600;
+    background: var(--accent); color: var(--accent-text);
+  }
+  form button:disabled { opacity: .5; cursor: default; }
+  .props { border-collapse: collapse; font-size: 12px; }
+  .props th { text-align: left; padding-right: 10px; color: #6b7686; font-weight: 500; vertical-align: top; }
+  .legend {
+    background: #fff; color: #1c2330; padding: 6px 10px; border-radius: 6px; font-size: 12px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .3); line-height: 1.6;
+  }
+  .legend i { display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; border-radius: 2px; }
+  @media (max-width: 800px) {
+    body { flex-direction: column-reverse; }
+    #sidebar { width: 100%; height: 55%; border-right: 0; border-top: 1px solid var(--border); }
+    #map { height: 45%; flex: none; }
+  }
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <header>
+    <div class="title">
+      <h1>Geo Assistant</h1>
+      <button id="reset" type="button">New conversation</button>
+    </div>
+    <div id="meta"></div>
+  </header>
+  <main id="log" aria-live="polite"></main>
+  <form id="form">
+    <textarea id="input" rows="2" placeholder="Ask about the geographic data…" autofocus></textarea>
+    <button id="send" type="submit">Ask</button>
+  </form>
+</div>
+<div id="map" role="application" aria-label="Map of the results"></div>
+
+<script>
+const EXAMPLES = [
+  "Which schools are within 300 m of a public transport stop?",
+  "How many stops are there in each commune?",
+  "What are the 3 nearest stops to longitude 6.13, latitude 49.61?",
+];
+const LAYER_COLORS = ["#1f6feb", "#2b8a3e", "#862e9c", "#0b7285", "#5f3dc4"];
+const RESULT_COLOR = "#e8590c";
+const MAX_COUNT_LABELS = 20;
+
+const log = document.getElementById("log");
+const form = document.getElementById("form");
+const input = document.getElementById("input");
+const send = document.getElementById("send");
+let history = [];  // [{role, content}] sent back to the server on each turn
+
+// ------------------------------------------------------------------ map
+
+const map = L.map("map", {preferCanvas: true, zoomSnap: 0.5}).setView([49.61, 6.13], 11);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+}).addTo(map);
+const layerControl = L.control.layers(null, {}, {collapsed: false}).addTo(map);
+const resultGroup = L.featureGroup().addTo(map);
+const legend = L.control({position: "bottomright"});
+legend.onAdd = () => L.DomUtil.create("div", "legend");
+
+function popupContent(properties) {
+  const table = document.createElement("table");
+  table.className = "props";
+  for (const [key, value] of Object.entries(properties || {})) {
+    if (value === null || value === "") continue;
+    const row = table.insertRow();
+    const th = document.createElement("th");
+    th.textContent = key;
+    row.appendChild(th);
+    row.insertCell().textContent = String(value);
+  }
+  return table;
+}
+
+function geojsonLayer(data, style, pointRadius) {
+  return L.geoJSON(data, {
+    style,
+    pointToLayer: (feature, latlng) => L.circleMarker(latlng, {radius: pointRadius}),
+    onEachFeature: (feature, layer) => layer.bindPopup(() => popupContent(feature.properties)),
+  });
+}
+
+// Catalogue layers are listed in the layer control and fetched when first switched on.
+async function addCatalogLayers() {
+  const layers = await (await fetch("/layers")).json();
+  Object.keys(layers).forEach((name, i) => {
+    const color = LAYER_COLORS[i % LAYER_COLORS.length];
+    const group = L.layerGroup();
+    group.once("add", async () => {
+      const data = await (await fetch("/layers/" + encodeURIComponent(name) + "?limit=10000")).json();
+      const style = {color, weight: 1.5, fillColor: color, fillOpacity: 0.08};
+      geojsonLayer(data, () => style, 4).addTo(group);
+      resultGroup.bringToFront();
+    });
+    const label = document.createElement("span");
+    label.textContent = `${name} (${layers[name].count})`;
+    label.style.borderLeft = `4px solid ${color}`;
+    label.style.paddingLeft = "6px";
+    layerControl.addOverlay(group, label.outerHTML);
+  });
+  return layers;
+}
+
+// Display the GeoJSON of an answer; polygons carrying a `count` are shaded by it.
+function showResult(geojson, trace) {
+  resultGroup.clearLayers();
+  legend.remove();
+  if (!geojson || !geojson.features || !geojson.features.length) return;
+
+  const counts = geojson.features
+    .map((f) => f.properties && f.properties.count)
+    .filter((c) => typeof c === "number");
+  const max = Math.max(1, ...counts);
+  const style = (feature) => {
+    const count = feature.properties ? feature.properties.count : undefined;
+    const shaded = typeof count === "number";
+    return {
+      color: RESULT_COLOR, weight: 2, fillColor: RESULT_COLOR,
+      fillOpacity: shaded ? 0.08 + 0.62 * (count / max) : 0.35,
+    };
+  };
+  const layer = geojsonLayer(geojson, style, 7).addTo(resultGroup);
+  if (counts.length) {
+    // Few zones: print the counts on the map. Many zones: show them on hover.
+    const permanent = counts.length <= MAX_COUNT_LABELS;
+    layer.eachLayer((l) => {
+      const {count, ...rest} = l.feature.properties;
+      const name = Object.values(rest)[0];
+      const text = permanent || name == null ? String(count) : `${name}: ${count}`;
+      l.bindTooltip(text, {permanent, direction: "center", sticky: !permanent});
+    });
+    legend.addTo(map);
+    legend.getContainer().innerHTML =
+      `<i style="background:${RESULT_COLOR};opacity:.12"></i>0<br>` +
+      `<i style="background:${RESULT_COLOR};opacity:.7"></i>${max} (max count)`;
+  }
+
+  // Mark the query point of a `nearest` call.
+  const near = (trace || []).filter((s) => s.tool === "nearest").pop();
+  if (near && typeof near.args.lon === "number" && typeof near.args.lat === "number") {
+    L.marker([near.args.lat, near.args.lon]).bindPopup("Query point").addTo(resultGroup);
+  }
+  map.fitBounds(resultGroup.getBounds(), {padding: [24, 24], maxZoom: 16});
+}
+
+// ----------------------------------------------------------------- chat
+
+function bubble(cls, text) {
+  const el = document.createElement("div");
+  el.className = "msg " + cls;
+  el.textContent = text;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+
+function addTrace(el, trace) {
+  if (!trace || !trace.length) return;
+  const details = document.createElement("details");
+  details.open = true;
+  const summary = document.createElement("summary");
+  summary.textContent = trace.length + (trace.length > 1 ? " tool calls" : " tool call");
+  const list = document.createElement("ol");
+  for (const step of trace) {
+    const item = document.createElement("li");
+    const call = document.createElement("code");
+    call.textContent = step.tool + "(" + JSON.stringify(step.args) + ")";
+    item.append(call, document.createElement("br"), step.summary ?? "");
+    list.appendChild(item);
+  }
+  details.append(summary, list);
+  el.appendChild(details);
+}
+
+function addMapButton(el, geojson, trace) {
+  const n = geojson && geojson.features ? geojson.features.length : 0;
+  if (!n) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "show-map";
+  button.textContent = `Show on map (${n} feature${n > 1 ? "s" : ""})`;
+  button.onclick = () => showResult(geojson, trace);
+  el.appendChild(button);
+}
+
+function showHint() {
+  log.innerHTML = "";
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.textContent = "Ask a question about the layers, for example:";
+  for (const text of EXAMPLES) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = text;
+    b.onclick = () => ask(text);
+    hint.appendChild(b);
+  }
+  log.appendChild(hint);
+}
+
+function errorMessage(status, data) {
+  if (typeof data.detail === "string") return data.detail;
+  if (Array.isArray(data.detail)) return data.detail.map((d) => d.msg).join("; ");
+  return "HTTP " + status;
+}
+
+async function ask(question) {
+  if (send.disabled) return;
+  if (!history.length) log.innerHTML = "";
+  bubble("user", question);
+  const pending = bubble("assistant pending", "Thinking…");
+  send.disabled = true;
+  try {
+    const res = await fetch("/ask", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({question, history: history.slice(-20)}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(errorMessage(res.status, data));
+    const answer = data.answer || "(no answer)";
+    pending.className = "msg assistant";
+    pending.textContent = answer;
+    addTrace(pending, data.trace);
+    addMapButton(pending, data.geojson, data.trace);
+    showResult(data.geojson, data.trace);
+    history.push({role: "user", content: question}, {role: "assistant", content: answer.slice(0, 4000)});
+  } catch (err) {
+    pending.className = "msg error";
+    pending.textContent = String(err.message || err);
+  } finally {
+    send.disabled = false;
+    log.scrollTop = log.scrollHeight;
+    input.focus();
+  }
+}
+
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const question = input.value.trim();
+  if (!question || send.disabled) return;
+  input.value = "";
+  ask(question);
+});
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+});
+document.getElementById("reset").onclick = () => {
+  history = [];
+  showResult(null);
+  showHint();
+  input.focus();
+};
+
+Promise.all([addCatalogLayers(), fetch("/health").then((r) => r.json())])
+  .then(([layers, health]) => {
+    const names = Object.keys(layers);
+    document.getElementById("meta").textContent =
+      `${names.length} layer${names.length === 1 ? "" : "s"}: ${names.join(", ")} · model: ${health.model}`;
+  })
+  .catch(() => { document.getElementById("meta").textContent = "Could not load the layers."; });
+showHint();
+</script>
+</body>
+</html>

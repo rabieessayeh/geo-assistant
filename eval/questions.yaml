@@ -1,0 +1,70 @@
+# Evaluation set: questions with the tool call a correct agent should make.
+#
+# The questions target the synthetic layers of data/sample (communes, stops,
+# schools, each with a `name` attribute). `expected.args` lists the arguments
+# that must match; `tool: null` marks a question the data cannot answer, where
+# the agent must not call any data tool (list_layers is always allowed).
+
+- id: list-layers
+  question: "Which layers are available?"
+  expected:
+    tool: list_layers
+
+- id: schools-near-stops
+  question: "Which schools are within 300 m of a public transport stop?"
+  expected:
+    tool: within_distance
+    args: {target: schools, reference: stops, meters: 300}
+
+- id: stops-near-schools-km
+  # Unit conversion (km -> m) and the opposite target/reference roles.
+  question: "Which stops are less than 1 km from a school?"
+  expected:
+    tool: within_distance
+    args: {target: stops, reference: schools, meters: 1000}
+
+- id: communes-near-schools
+  # The target layer is made of polygons.
+  question: "Which communes are within 500 metres of a school?"
+  expected:
+    tool: within_distance
+    args: {target: communes, reference: schools, meters: 500}
+
+- id: stops-per-commune
+  question: "How many stops are there in each commune?"
+  expected:
+    tool: count_in_polygons
+    args: {points: stops, polygons: communes, label: name}
+
+- id: commune-most-schools
+  # A ranking question that still needs the counting tool.
+  question: "Which commune has the most schools?"
+  expected:
+    tool: count_in_polygons
+    args: {points: schools, polygons: communes, label: name}
+
+- id: stops-per-commune-fr
+  # Same intent in French.
+  question: "Combien d'arrêts y a-t-il dans chaque commune ?"
+  expected:
+    tool: count_in_polygons
+    args: {points: stops, polygons: communes, label: name}
+
+- id: nearest-stops
+  question: "What are the 3 nearest stops to longitude 6.13, latitude 49.61?"
+  expected:
+    tool: nearest
+    args: {layer: stops, lon: 6.13, lat: 49.61, k: 3}
+
+- id: nearest-school-latlon-order
+  # Coordinates given as latitude first: lon/lat must not be swapped.
+  question: "Which school is the closest to the point 49.60 N, 6.12 E?"
+  expected:
+    tool: nearest
+    args: {layer: schools, lon: 6.12, lat: 49.60, k: 1}
+
+- id: out-of-scope
+  # No layer holds population figures: the agent must say so, not invent a number.
+  question: "What is the population of the commune named Centre?"
+  expected:
+    tool: null

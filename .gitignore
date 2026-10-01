@@ -1,0 +1,39 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Data: only the small synthetic sample is versioned.
+# Real datasets are re-created with scripts/fetch_lux_data.py.
+data/*
+!data/sample/
+*.gpkg
+*.shp
+*.shx
+*.dbf
+*.prj
+*.zip
+
+# Evaluation outputs
+eval/results/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
