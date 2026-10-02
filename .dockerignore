@@ -9,7 +9,6 @@ __pycache__
 *.egg-info
 .pytest_cache
 .ruff_cache
-data/lux
 eval/results
 docs
 tests

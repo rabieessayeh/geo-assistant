@@ -324,6 +324,21 @@ document.getElementById("reset").onclick = () => {
   input.focus();
 };
 
+// Credit the data publishers (required by CC BY) in the map attribution.
+fetch("/sources").then((r) => r.json()).then((sources) => {
+  const seen = new Set();
+  for (const source of Object.values(sources)) {
+    if (!source.publisher || !/^https?:\/\//.test(source.dataset) || seen.has(source.dataset)) continue;
+    seen.add(source.dataset);
+    const link = document.createElement("a");
+    link.href = source.dataset;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = `${source.publisher} (${source.licence})`;
+    map.attributionControl.addAttribution("Data: " + link.outerHTML);
+  }
+}).catch(() => {});
+
 Promise.all([addCatalogLayers(), fetch("/health").then((r) => r.json())])
   .then(([layers, health]) => {
     const names = Object.keys(layers);

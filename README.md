@@ -2,6 +2,8 @@
 
 Ask questions about geospatial data in plain language and get answers you can trace: an LLM chooses among whitelisted spatial tools, and every number comes from GeoPandas, not from the model.
 
+Live demo: <URL> (free hosting, first load may take ~1 min)
+
 [![CI](https://github.com/rabieessayeh/geo-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/rabieessayeh/geo-assistant/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -24,8 +26,9 @@ Geo Assistant separates the two jobs:
 - Works with any OpenAI-compatible LLM endpoint (hosted or local), with retry and backoff on rate limits.
 - Web map (Leaflet, no build step): chat panel, tool-call trace, results drawn on the map, layer toggles.
 - JSON API (FastAPI) with interactive docs at `/docs`; tools can be called directly, without an LLM.
-- Real open data for Luxembourg fetched by script, plus a synthetic dataset for offline use.
+- Real open data for Luxembourg (included, refreshed by script), plus a synthetic dataset for tests.
 - Evaluation set measuring how often the model picks the right tool and arguments.
+- Optional per-visitor and global rate limits on `/ask`, for public demos running on a shared LLM quota.
 - Tests that run without network or API key, linting with ruff, Docker image and CI workflow.
 
 ## Architecture
@@ -63,11 +66,11 @@ uvicorn app.api:app --reload
 
 Open <http://localhost:8000/>. The repository ships a small synthetic dataset in `data/sample/` (regenerate it with `python scripts/make_sample_data.py`), so the application runs as soon as an LLM endpoint is configured.
 
-To use real Luxembourg data instead:
+To use the real Luxembourg layers of `data/lux/` instead:
 
 ```bash
-python scripts/fetch_lux_data.py     # writes data/lux/, takes a minute or two
 DATA_DIR=data/lux uvicorn app.api:app
+python scripts/fetch_lux_data.py     # optional: refresh data/lux/ from the portal
 ```
 
 Or with Docker:
@@ -76,6 +79,8 @@ Or with Docker:
 cp .env.example .env
 docker compose up --build
 ```
+
+With Compose the dataset follows `DATA_DIR` in `.env` (the sample by default; set `DATA_DIR=data/lux` for the real layers). The image limits `/ask` to 10 questions per hour per visitor (see [Deployment](#deployment)); add `ASK_RATE_LIMIT=0` to `.env` to lift the limit locally.
 
 ### Example questions
 
@@ -100,7 +105,7 @@ curl localhost:8000/layers
 curl "localhost:8000/layers/stops?limit=10"
 ```
 
-`POST /ask` also accepts a `history` list of previous `user` / `assistant` messages for follow-up questions. `GET /health` reports the loaded layers and the configured model.
+`POST /ask` also accepts a `history` list of previous `user` / `assistant` messages for follow-up questions. `GET /health` reports the loaded layers and the configured model, and `GET /sources` returns the provenance of the layers.
 
 ## LLM providers
 
@@ -115,13 +120,13 @@ The agent needs a model that supports tool calling, reached through an OpenAI-co
 
 Only the Groq configuration has been run end to end with this version of the code. The other rows follow each provider's documented OpenAI-compatible endpoint; model names change over time, so check the provider's current list.
 
-Optional settings (`LLM_TIMEOUT_S`, `LLM_MAX_RETRIES`, `LLM_RETRY_BASE_S`, `MAX_STEPS`, `DATA_DIR`, `LOG_LEVEL`) are documented in [.env.example](.env.example).
+Optional settings (timeouts and retries, `MAX_STEPS`, `DATA_DIR`, `LOG_LEVEL`, rate limits) are documented in [.env.example](.env.example).
 
 ## Data
 
 ### Sources
 
-`scripts/fetch_lux_data.py` downloads open data published on [data.public.lu](https://data.public.lu), keeps the useful columns and writes one GeoJSON file per layer to `data/lux/`, together with a `SOURCES.json` file recording the exact resources and the download time.
+The layers of `data/lux/` are versioned in this repository. They were produced by `scripts/fetch_lux_data.py`, which downloads open data published on [data.public.lu](https://data.public.lu), keeps the useful columns and writes one GeoJSON file per layer, together with a `SOURCES.json` file recording the exact resources and the download time.
 
 | Layer | Dataset | Publisher | Licence |
 | --- | --- | --- | --- |
@@ -157,6 +162,32 @@ python eval/run_eval.py --delay 2      # needs a configured LLM
 
 `--out results.json` saves the per-question detail, and `--data` points the run at another layer folder. The evaluation does not judge the wording of the final answer.
 
+## Deployment
+
+### Docker image (Render and similar hosts)
+
+The [Dockerfile](Dockerfile) builds a self-contained image for a public demo:
+
+- It includes `data/lux/` and sets `DATA_DIR=data/lux`.
+- It listens on the port given by the `PORT` environment variable (8000 if unset), as hosting platforms such as Render expect.
+- It limits `/ask` to 10 questions per hour per visitor. Further questions get an HTTP 429 with a message shown in the chat; the other endpoints are not limited.
+
+On the host, create a web service from this repository with the Docker runtime and set `LLM_BASE_URL`, `LLM_MODEL` and `LLM_API_KEY` as environment variables (the key as a secret). No `.env` file is used: it is excluded from both git and the image.
+
+### Hugging Face Space
+
+The application can also be published as a [Hugging Face Space](https://huggingface.co/docs/hub/spaces-sdks-docker) (Docker SDK, port 7860). The Space is a separate git repository, assembled from this one:
+
+```bash
+python scripts/build_space.py ../geo-assistant-space
+```
+
+The script copies the application, `data/lux/` with its `SOURCES.json`, and the Space's own `README.md` and `Dockerfile` from [deploy/huggingface/](deploy/huggingface/). Files are taken from an explicit list, so `.env` is never copied: the API key is provided to the Space as a secret named `LLM_API_KEY`.
+
+### Rate limit
+
+`/ask` is rate limited with `ASK_RATE_LIMIT` (questions per visitor per window) and `ASK_GLOBAL_LIMIT` (questions per window in total). Both are off by default when running from source and are set in the Dockerfiles. Visitors are identified by the first address of `X-Forwarded-For` when `TRUST_FORWARDED_FOR` is enabled, and by the connection address otherwise. A client can forge that header, which is what the optional global limit is for. Counters are kept in memory and reset when the container restarts.
+
 ## Project structure
 
 ```
@@ -167,15 +198,19 @@ geo-assistant/
 │   ├── api.py              # FastAPI application
 │   ├── config.py           # settings (pydantic-settings) and logging
 │   ├── evaluation.py       # scoring of tool choices
+│   ├── ratelimit.py        # in-memory rate limiter for /ask
 │   └── static/index.html   # map front-end (Leaflet)
 ├── scripts/
 │   ├── fetch_lux_data.py   # download and clean real Luxembourg data
-│   └── make_sample_data.py # synthetic dataset
+│   ├── make_sample_data.py # synthetic dataset
+│   └── build_space.py      # assemble the Hugging Face Space folder
 ├── eval/
 │   ├── questions.yaml      # evaluation set
 │   └── run_eval.py         # evaluation runner
 ├── tests/                  # pytest suite (offline)
-├── data/sample/            # synthetic layers (versioned)
+├── data/sample/            # synthetic layers, used by the tests and the evaluation
+├── data/lux/               # real Luxembourg layers and SOURCES.json
+├── deploy/huggingface/     # README header and Dockerfile of the Space
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pyproject.toml          # dependencies, ruff and pytest configuration

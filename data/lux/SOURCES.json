@@ -1,0 +1,44 @@
+{
+  "communes": {
+    "dataset": "https://data.public.lu/en/datasets/limites-administratives-du-grand-duche-de-luxembourg/",
+    "publisher": "Administration du cadastre et de la topographie",
+    "licence": "CC0",
+    "resources": [
+      "https://download.data.public.lu/resources/limites-administratives-du-grand-duche-de-luxembourg/20260905-030016/limadmin.geojson"
+    ],
+    "downloaded": "2026-10-01T16:02:41+00:00",
+    "features": 100
+  },
+  "cantons": {
+    "dataset": "https://data.public.lu/en/datasets/limites-administratives-du-grand-duche-de-luxembourg/",
+    "publisher": "Administration du cadastre et de la topographie",
+    "licence": "CC0",
+    "resources": [
+      "https://download.data.public.lu/resources/limites-administratives-du-grand-duche-de-luxembourg/20260905-030016/limadmin.geojson"
+    ],
+    "downloaded": "2026-10-01T16:02:41+00:00",
+    "features": 12
+  },
+  "stops": {
+    "dataset": "https://data.public.lu/en/datasets/horaires-et-arrets-des-transport-publics-gtfs/",
+    "publisher": "Administration des transports publics",
+    "licence": "CC BY",
+    "resources": [
+      "https://download.data.public.lu/resources/horaires-et-arrets-des-transport-publics-gtfs/20261001-055928/gtfs-20260930-20261212.zip"
+    ],
+    "downloaded": "2026-10-01T16:02:44+00:00",
+    "features": 2805
+  },
+  "schools": {
+    "dataset": "https://data.public.lu/en/datasets/adresses-des-batiments-scolaires-2021/",
+    "publisher": "Ministère de l'Éducation nationale, de l'Enfance et de la Jeunesse",
+    "licence": "CC0",
+    "resources": [
+      "https://download.data.public.lu/resources/adresses-des-batiments-scolaires-2021/20230328-230233/adr-ecoles-fondamentales-2021.xlsx",
+      "https://download.data.public.lu/resources/adresses-des-batiments-scolaires-2021/20230328-230256/adr-lycees-2021.xlsx",
+      "https://apiv4.geoportail.lu/geocode/search"
+    ],
+    "downloaded": "2026-10-01T16:04:56+00:00",
+    "features": 177
+  }
+}

@@ -28,9 +28,21 @@ class Settings(BaseSettings):
     # Agent loop
     max_steps: int = Field(default=5, ge=1, description="Max LLM round-trips per question.")
 
+    # Rate limit on /ask, for public demos running on a shared LLM quota (0 = no limit).
+    ask_rate_limit: int = Field(default=0, ge=0, description="Questions per client per window.")
+    ask_global_limit: int = Field(default=0, ge=0, description="Questions per window, in total.")
+    ask_rate_window_s: int = Field(default=3600, gt=0)
+    # Behind a reverse proxy the client address is read from X-Forwarded-For.
+    trust_forwarded_for: bool = False
+
     # Data and logging
     data_dir: Path = Path("data/sample")
     log_level: str = "INFO"
+
+    @property
+    def llm_key_is_placeholder(self) -> bool:
+        """True when no API key was provided (only valid for a local server)."""
+        return self.llm_api_key.get_secret_value() == "ollama"
 
 
 @lru_cache

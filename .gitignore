@@ -19,10 +19,12 @@ venv/
 .coverage
 htmlcov/
 
-# Data: only the small synthetic sample is versioned.
-# Real datasets are re-created with scripts/fetch_lux_data.py.
+# Data: the synthetic sample and the cleaned Luxembourg layers (CC0 / CC BY,
+# with SOURCES.json for attribution) are versioned; refresh the latter with
+# scripts/fetch_lux_data.py.
 data/*
 !data/sample/
+!data/lux/
 *.gpkg
 *.shp
 *.shx
